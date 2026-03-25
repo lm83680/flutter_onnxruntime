@@ -124,11 +124,12 @@ class OrtValue {
       final String filePath = await _createTempTensorFilePath('ort_input_${sourceType}_${_uuid.v4()}.bin');
       try {
         await File(filePath).writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
-        return OrtValue.fromBinaryFile(
+        final OrtValue value = await OrtValue.fromBinaryFile(
           dataType: OrtDataType.values.firstWhere((dt) => dt.name == sourceType),
           filePath: filePath,
           shape: shape,
         );
+        return value;
       } finally {
         try {
           await File(filePath).delete();
