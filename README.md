@@ -14,7 +14,7 @@ Native Wrapper Flutter Plugin for ONNX Runtime
 
 ## 🌟 Why This Project?
 
-`flutter_onnxruntime` is a lightweight plugin that provides native wrappers for running ONNX Runtime on multiple platforms.
+`flutter_onnxruntime` is a lightweight plugin that provides native wrappers for running ONNX Runtime on Android, iOS, and OHOS.
 
       📦 No Pre-built Libraries
       Libraries are fetched directly from official repositories during installation, ensuring they are always up-to-date!
@@ -92,16 +92,16 @@ Clone [this repository](https://github.com/masicai/flutter-onnxruntime-examples)
 
 ## 🚧 Implementation Status
 
-| Feature | Android | iOS | Linux | macOS | Windows | Web |
-|---------|:-------:|:---:|:-----:|:-----:|:-------:|:---: |
-| CPU Inference | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| EP<sup>1</sup> Configuration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Input/Output names | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Data Type Conversion | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Inference on Emulator | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Input/Output Info | ✅ | ❌* | ✅ | ❌* | ✅ | ✅ |
-| Model Metadata | ✅ | ❌* | ✅ | ❌* | ✅ | ❌* |
-| FP16 Support | ✅ | ✅ | ✍️ | ✅ | ✍️ | ✍️ |
+| Feature | Android | iOS | OHOS |
+|---------|:-------:|:---:|:----:|
+| CPU Inference | ✅ | ✅ | ✅ |
+| EP<sup>1</sup> Configuration | ✅ | ✅ | 🚧 |
+| Input/Output names | ✅ | ✅ | ✅ |
+| Data Type Conversion | ✅ | ✅ | 🚧 |
+| Inference on Emulator | ✅ | ✅ | ✅ |
+| Input/Output Info | ✅ | ❌* | ✅ |
+| Model Metadata | ✅ | ❌* | ✅ |
+| FP16 Support | ✅ | ✅ | ✍️ |
 
 ✅: Completed
 
@@ -145,22 +145,6 @@ use_frameworks! :linkage => :static
 
 # existing code ...
 ```
-
-### macOS
-
-macOS build requires minimum version `macOS 14`.
-
-* In `macos/Podfile`, change the following lines:
-  ```bash
-  platform :osx, '14.0'
-  ```
-
-* Change the "Minimum Deployments" to 14.0 in XCode. In your terminal:
-  ```bash
-  open Runner.xcworkspace
-  ```
-  In `Runner` -> `General`, change `Minimum Deployments` to `14.0`.
-
 
 ## 🛠️ Troubleshooting
 

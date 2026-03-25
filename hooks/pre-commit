@@ -64,14 +64,6 @@ if [ -d "ios" ]; then
   fi
 fi
 
-# Check for Swift files (macOS)
-if [ -d "macos" ]; then
-  run_swiftlint_for_directory "macos" "macOS"
-  if [ $? -ne 0 ]; then
-    SWIFT_LINT_FAILED=1
-  fi
-fi
-
 # Check for C++ files
 CPP_LINT_FAILED=0
 if [ -d "cpp" ] || find . -name "*.cpp" -o -name "*.h" -o -name "*.cc" -o -name "*.hpp" | grep -q .; then
@@ -163,4 +155,3 @@ fi
 # If we got here, all checks passed
 echo "All format checks and analyses passed."
 exit 0
-

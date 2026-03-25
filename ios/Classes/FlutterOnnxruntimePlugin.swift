@@ -88,10 +88,14 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
       handleGetOutputInfo(call: call, result: result)
     case "createOrtValue":
       handleCreateOrtValue(call, result: result)
+    case "createOrtValueFromBinaryFile":
+      handleCreateOrtValueFromBinaryFile(call, result: result)
     case "convertOrtValue":
       handleConvertOrtValue(call, result: result)
     case "getOrtValueData":
       handleGetOrtValueData(call, result: result)
+    case "writeOrtValueDataToBinaryFile":
+      handleWriteOrtValueDataToBinaryFile(call, result: result)
     case "releaseOrtValue":
       handleReleaseOrtValue(call, result: result)
     default:
@@ -675,6 +679,63 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     }
   }
 
+  private func handleCreateOrtValueFromBinaryFile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any],
+          let sourceType = args["sourceType"] as? String,
+          let filePath = args["filePath"] as? String,
+          let shape = args["shape"] as? [Int] else {
+      result(FlutterError(code: "INVALID_ARG", message: "Missing required arguments", details: nil))
+      return
+    }
+
+    let fileURL = URL(fileURLWithPath: filePath)
+    guard FileManager.default.fileExists(atPath: fileURL.path) else {
+      result(FlutterError(code: "FILE_NOT_FOUND", message: "Binary tensor file not found", details: nil))
+      return
+    }
+
+    do {
+      let fileData = try Data(contentsOf: fileURL)
+      let shapeNumbers = shape.map { NSNumber(value: $0) }
+      let elementCount = shape.reduce(1, *)
+      let tensor: ORTValue
+
+      switch sourceType {
+      case "float32":
+        guard fileData.count == elementCount * MemoryLayout<Float>.stride else {
+          result(FlutterError(code: "INVALID_DATA", message: "Binary data size does not match float32 tensor shape", details: nil))
+          return
+        }
+        tensor = try ORTValue(tensorData: NSMutableData(data: fileData), elementType: .float, shape: shapeNumbers)
+      case "int32":
+        guard fileData.count == elementCount * MemoryLayout<Int32>.stride else {
+          result(FlutterError(code: "INVALID_DATA", message: "Binary data size does not match int32 tensor shape", details: nil))
+          return
+        }
+        tensor = try ORTValue(tensorData: NSMutableData(data: fileData), elementType: .int32, shape: shapeNumbers)
+      case "int64":
+        guard fileData.count == elementCount * MemoryLayout<Int64>.stride else {
+          result(FlutterError(code: "INVALID_DATA", message: "Binary data size does not match int64 tensor shape", details: nil))
+          return
+        }
+        tensor = try ORTValue(tensorData: NSMutableData(data: fileData), elementType: .int64, shape: shapeNumbers)
+      default:
+        result(FlutterError(code: "UNSUPPORTED_TYPE", message: "Binary file transport only supports float32/int32/int64", details: nil))
+        return
+      }
+
+      let valueId = UUID().uuidString
+      ortValues[valueId] = tensor
+      result([
+        "valueId": valueId,
+        "dataType": sourceType,
+        "shape": shape
+      ])
+    } catch {
+      result(FlutterError(code: "BINARY_TENSOR_ERROR", message: error.localizedDescription, details: nil))
+    }
+  }
+
   // swiftlint:disable:next cyclomatic_complexity function_body_length
   private func handleConvertOrtValue(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard let args = call.arguments as? [String: Any],
@@ -1021,6 +1082,62 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
       result(resultMap)
     } catch {
       result(FlutterError(code: "DATA_EXTRACTION_ERROR", message: error.localizedDescription, details: nil))
+    }
+  }
+
+  private func handleWriteOrtValueDataToBinaryFile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any],
+          let valueId = args["valueId"] as? String,
+          let filePath = args["filePath"] as? String else {
+      result(FlutterError(code: "INVALID_ARG", message: "Missing valueId or filePath", details: nil))
+      return
+    }
+
+    guard let tensor = ortValues[valueId] else {
+      result(FlutterError(code: "INVALID_VALUE", message: "Tensor not found or already being disposed", details: nil))
+      return
+    }
+
+    do {
+      if Float16Helper.isFloat16Tensor(tensor) {
+        result(FlutterError(code: "UNSUPPORTED_TYPE", message: "Binary file export only supports float32/int32/int64", details: nil))
+        return
+      }
+
+      let tensorInfo = try tensor.tensorTypeAndShapeInfo()
+      let shape = try tensorInfo.shape.map { Int(truncating: $0) }
+      let dataType = _getDataTypeName(from: tensorInfo.elementType)
+      guard ["float32", "int32", "int64"].contains(dataType) else {
+        result(FlutterError(code: "UNSUPPORTED_TYPE", message: "Binary file export only supports float32/int32/int64", details: nil))
+        return
+      }
+
+      let dataPtr = try tensor.tensorData()
+      let elementCount = shape.reduce(1, *)
+      let byteCount: Int
+      switch tensorInfo.elementType {
+      case .float:
+        byteCount = elementCount * MemoryLayout<Float>.stride
+      case .int32:
+        byteCount = elementCount * MemoryLayout<Int32>.stride
+      case .int64:
+        byteCount = elementCount * MemoryLayout<Int64>.stride
+      default:
+        result(FlutterError(code: "UNSUPPORTED_TYPE", message: "Binary file export only supports float32/int32/int64", details: nil))
+        return
+      }
+
+      let fileURL = URL(fileURLWithPath: filePath)
+      try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+      let fileData = Data(bytes: dataPtr.bytes, count: byteCount)
+      try fileData.write(to: fileURL, options: .atomic)
+
+      result([
+        "dataType": dataType,
+        "shape": shape
+      ])
+    } catch {
+      result(FlutterError(code: "BINARY_TENSOR_ERROR", message: error.localizedDescription, details: nil))
     }
   }
 

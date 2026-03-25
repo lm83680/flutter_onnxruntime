@@ -103,6 +103,15 @@ abstract class FlutterOnnxruntimePlatform extends PlatformInterface {
     throw UnimplementedError('createOrtValue() has not been implemented.');
   }
 
+  /// 从二进制文件创建 OrtValue。
+  ///
+  /// [sourceType] 是源数据类型，例如 `float32`、`int32`
+  /// [filePath] 是二进制文件路径
+  /// [shape] 是张量形状
+  Future<Map<String, dynamic>> createOrtValueFromBinaryFile(String sourceType, String filePath, List<int> shape) {
+    throw UnimplementedError('createOrtValueFromBinaryFile() has not been implemented.');
+  }
+
   /// Converts an OrtValue to a different data type
   ///
   /// [valueId] is the ID of the OrtValue to convert
@@ -116,6 +125,14 @@ abstract class FlutterOnnxruntimePlatform extends PlatformInterface {
   /// [valueId] is the ID of the OrtValue to get data from
   Future<Map<String, dynamic>> getOrtValueData(String valueId) {
     throw UnimplementedError('getOrtValueData() has not been implemented.');
+  }
+
+  /// 将 OrtValue 数据写入二进制文件。
+  ///
+  /// [valueId] 是需要导出的 OrtValue ID
+  /// [filePath] 是目标二进制文件路径
+  Future<Map<String, dynamic>> writeOrtValueDataToBinaryFile(String valueId, String filePath) {
+    throw UnimplementedError('writeOrtValueDataToBinaryFile() has not been implemented.');
   }
 
   /// Releases native resources associated with an OrtValue

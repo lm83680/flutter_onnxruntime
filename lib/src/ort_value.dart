@@ -4,8 +4,11 @@
 // This source code is licensed under the license found in the
 // LICENSE file in the root directory of this source tree.
 
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_onnxruntime/src/flutter_onnxruntime_platform_interface.dart';
 
 /// Represents a data type in ONNX Runtime
@@ -75,9 +78,7 @@ class OrtValue {
   /// - The shape of the list is not necessary to be in the correct shapes as they will be flattened in
   ///   the preprocess. However, the order of the elements and the total number of elements must match exactly
   ///   with the target shape
-  /// - A List\<int> will be detected and assigned to int32 type in all platforms except Web. The Web
-  ///   platform only recognize the float format or you have to typed list such as Int32List, Int64List, etc.
-  /// - Int64List is not supported in the web platform.
+  /// - A List\<int> will be detected and assigned to int32 type on the supported native platforms.
   ///
   /// [data] is the data to create the tensor from (any supported list type)
   /// [shape] is the shape of the tensor
@@ -116,7 +117,30 @@ class OrtValue {
       throw ArgumentError('Unsupported data type: ${data.runtimeType}');
     }
 
+    if (data is TypedData && await _shouldUseBinaryTransport(sourceType)) {
+      final String filePath = await _createTempTensorFilePath('ort_input_$sourceType.bin');
+      await File(filePath).writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
+      return OrtValue.fromBinaryFile(
+        dataType: OrtDataType.values.firstWhere((dt) => dt.name == sourceType),
+        filePath: filePath,
+        shape: shape,
+      );
+    }
+
     final result = await FlutterOnnxruntimePlatform.instance.createOrtValue(sourceType, data, shape);
+    return OrtValue.fromMap(result);
+  }
+
+  /// 从二进制文件创建 OrtValue。
+  ///
+  /// 该方法适合大张量场景，避免通过 MethodChannel 直接搬运完整数组。
+  static Future<OrtValue> fromBinaryFile({
+    required OrtDataType dataType,
+    required String filePath,
+    required List<int> shape,
+  }) async {
+    final String sourceType = dataType.toString().split('.').last;
+    final result = await FlutterOnnxruntimePlatform.instance.createOrtValueFromBinaryFile(sourceType, filePath, shape);
     return OrtValue.fromMap(result);
   }
 
@@ -157,6 +181,35 @@ class OrtValue {
     final data = await FlutterOnnxruntimePlatform.instance.getOrtValueData(id);
     final rawData = data['data'];
     return (rawData is List) ? rawData : List<dynamic>.from(rawData);
+  }
+
+  /// 以高效方式读取 float32 张量。
+  ///
+  /// 插件会在内部根据平台自动选择读取路径，调用方无需自行判断平台。
+  Future<Float32List> asFloat32List() async {
+    if (dataType != OrtDataType.float32) {
+      throw ArgumentError('Expected float32 tensor, but got ${dataType.name}');
+    }
+
+    if (await _shouldUseBinaryTransport('float32')) {
+      final String filePath = await _createTempTensorFilePath('ort_output_$id.bin');
+      final Map<String, dynamic> metadata = await writeDataToBinaryFile(filePath);
+      if (metadata['dataType'] != 'float32') {
+        throw ArgumentError('Expected float32 tensor, but got ${metadata['dataType']}');
+      }
+      final Uint8List rawBytes = await File(filePath).readAsBytes();
+      return rawBytes.buffer.asFloat32List(rawBytes.offsetInBytes, rawBytes.lengthInBytes ~/ Float32List.bytesPerElement);
+    }
+
+    final List<dynamic> rawValues = await asFlattenedList();
+    return Float32List.fromList(rawValues.map((value) => (value as num).toDouble()).toList(growable: false));
+  }
+
+  /// 将张量原始数据导出到二进制文件。
+  ///
+  /// 返回值包含 `dataType` 与 `shape` 元信息。
+  Future<Map<String, dynamic>> writeDataToBinaryFile(String filePath) async {
+    return FlutterOnnxruntimePlatform.instance.writeOrtValueDataToBinaryFile(id, filePath);
   }
 
   /// Release native resources associated with this tensor
@@ -290,5 +343,32 @@ class OrtValue {
     }
 
     return result;
+  }
+
+  static Future<bool>? _binaryTransportFuture;
+
+  static Future<bool> _shouldUseBinaryTransport(String sourceType) {
+    if (!<String>{'float32', 'int32', 'int64'}.contains(sourceType)) {
+      return SynchronousFuture<bool>(false);
+    }
+    if (kIsWeb) {
+      return SynchronousFuture<bool>(false);
+    }
+    _binaryTransportFuture ??= _resolveBinaryTransportSupport();
+    return _binaryTransportFuture!;
+  }
+
+  static Future<bool> _resolveBinaryTransportSupport() async {
+    final String? platformVersion = await FlutterOnnxruntimePlatform.instance.getPlatformVersion();
+    if (platformVersion == null) {
+      return false;
+    }
+    return platformVersion == 'OpenHarmony' || platformVersion.startsWith('Android ') || platformVersion.startsWith('iOS ');
+  }
+
+  static Future<String> _createTempTensorFilePath(String fileName) async {
+    final Directory directory = await getTemporaryDirectory();
+    await directory.create(recursive: true);
+    return '${directory.path}${Platform.pathSeparator}$fileName';
   }
 }

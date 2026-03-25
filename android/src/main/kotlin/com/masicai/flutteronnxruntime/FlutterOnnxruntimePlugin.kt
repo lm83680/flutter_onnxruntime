@@ -23,6 +23,7 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.io.File
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.nio.IntBuffer
 import java.nio.LongBuffer
@@ -803,6 +804,76 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                     result.error("TENSOR_CREATION_ERROR", e.message, e.stackTraceToString())
                 }
             }
+            "createOrtValueFromBinaryFile" -> {
+                try {
+                    val sourceType = call.argument<String>("sourceType")
+                    val filePath = call.argument<String>("filePath")
+                    val shape = call.argument<List<Int>>("shape")
+
+                    if (sourceType == null || filePath == null || shape == null) {
+                        result.error("INVALID_ARG", "Missing required arguments", null)
+                        return
+                    }
+
+                    val file = File(filePath)
+                    if (!file.exists()) {
+                        result.error("FILE_NOT_FOUND", "Binary tensor file not found", null)
+                        return
+                    }
+
+                    val rawBytes = file.readBytes()
+                    val longShape = shape.map { it.toLong() }.toLongArray()
+                    val elementCount = longShape.fold(1L) { acc, dim -> acc * dim }.toInt()
+                    val byteBuffer = ByteBuffer.wrap(rawBytes).order(ByteOrder.nativeOrder())
+
+                    val tensor =
+                        when (sourceType) {
+                            "float32" -> {
+                                if (rawBytes.size != elementCount * Float.SIZE_BYTES) {
+                                    result.error("INVALID_DATA", "Binary data size does not match float32 tensor shape", null)
+                                    return
+                                }
+                                val values = FloatArray(elementCount)
+                                byteBuffer.asFloatBuffer().get(values)
+                                OnnxTensor.createTensor(ortEnvironment, FloatBuffer.wrap(values), longShape)
+                            }
+                            "int32" -> {
+                                if (rawBytes.size != elementCount * Int.SIZE_BYTES) {
+                                    result.error("INVALID_DATA", "Binary data size does not match int32 tensor shape", null)
+                                    return
+                                }
+                                val values = IntArray(elementCount)
+                                byteBuffer.asIntBuffer().get(values)
+                                OnnxTensor.createTensor(ortEnvironment, IntBuffer.wrap(values), longShape)
+                            }
+                            "int64" -> {
+                                if (rawBytes.size != elementCount * Long.SIZE_BYTES) {
+                                    result.error("INVALID_DATA", "Binary data size does not match int64 tensor shape", null)
+                                    return
+                                }
+                                val values = LongArray(elementCount)
+                                byteBuffer.asLongBuffer().get(values)
+                                OnnxTensor.createTensor(ortEnvironment, LongBuffer.wrap(values), longShape)
+                            }
+                            else -> {
+                                result.error("UNSUPPORTED_TYPE", "Binary file transport only supports float32/int32/int64", null)
+                                return
+                            }
+                        }
+
+                    val valueId = UUID.randomUUID().toString()
+                    ortValues[valueId] = tensor
+                    result.success(
+                        mapOf(
+                            "valueId" to valueId,
+                            "dataType" to sourceType,
+                            "shape" to shape,
+                        ),
+                    )
+                } catch (e: Exception) {
+                    result.error("BINARY_TENSOR_ERROR", e.message, e.stackTraceToString())
+                }
+            }
             "convertOrtValue" -> {
                 try {
                     val valueId = call.argument<String>("valueId")
@@ -1079,6 +1150,77 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                     result.success(resultMap)
                 } catch (e: Exception) {
                     result.error("DATA_EXTRACTION_ERROR", e.message, e.stackTraceToString())
+                }
+            }
+            "writeOrtValueDataToBinaryFile" -> {
+                try {
+                    val valueId = call.argument<String>("valueId")
+                    val filePath = call.argument<String>("filePath")
+
+                    if (valueId == null || filePath == null) {
+                        result.error("INVALID_ARG", "Missing valueId or filePath", null)
+                        return
+                    }
+
+                    val tensor = ortValues[valueId]
+                    if (tensor == null) {
+                        result.error("INVALID_VALUE", "Tensor not found or already being disposed", null)
+                        return
+                    }
+
+                    if (tensor !is OnnxTensor) {
+                        result.error("INVALID_TENSOR_TYPE", "OrtValue is not a tensor", null)
+                        return
+                    }
+
+                    val shape = tensor.info.shape.toList()
+                    val flatSize = shape.fold(1L) { acc, dim -> acc * dim }.toInt()
+                    val outputFile = File(filePath)
+                    outputFile.parentFile?.mkdirs()
+                    val dataType = ortTypeToString(tensor.info.type)
+
+                    when (dataType) {
+                        "float32" -> {
+                            val buffer = tensor.floatBuffer
+                            buffer.rewind()
+                            val values = FloatArray(flatSize)
+                            buffer.get(values)
+                            val bytes = ByteBuffer.allocate(values.size * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+                            bytes.asFloatBuffer().put(values)
+                            outputFile.writeBytes(bytes.array())
+                        }
+                        "int32" -> {
+                            val buffer = tensor.intBuffer
+                            buffer.rewind()
+                            val values = IntArray(flatSize)
+                            buffer.get(values)
+                            val bytes = ByteBuffer.allocate(values.size * Int.SIZE_BYTES).order(ByteOrder.nativeOrder())
+                            bytes.asIntBuffer().put(values)
+                            outputFile.writeBytes(bytes.array())
+                        }
+                        "int64" -> {
+                            val buffer = tensor.longBuffer
+                            buffer.rewind()
+                            val values = LongArray(flatSize)
+                            buffer.get(values)
+                            val bytes = ByteBuffer.allocate(values.size * Long.SIZE_BYTES).order(ByteOrder.nativeOrder())
+                            bytes.asLongBuffer().put(values)
+                            outputFile.writeBytes(bytes.array())
+                        }
+                        else -> {
+                            result.error("UNSUPPORTED_TYPE", "Binary file export only supports float32/int32/int64", null)
+                            return
+                        }
+                    }
+
+                    result.success(
+                        mapOf(
+                            "dataType" to dataType,
+                            "shape" to shape,
+                        ),
+                    )
+                } catch (e: Exception) {
+                    result.error("BINARY_TENSOR_ERROR", e.message, e.stackTraceToString())
                 }
             }
             "releaseOrtValue" -> {

@@ -64,6 +64,15 @@ class MockFlutterOnnxruntimePlatform with MockPlatformInterfaceMixin implements 
   }
 
   @override
+  Future<Map<String, dynamic>> createOrtValueFromBinaryFile(String sourceType, String filePath, List<int> shape) {
+    return Future.value({
+      'valueId': 'binary_test_value_id_${DateTime.now().millisecondsSinceEpoch}',
+      'dataType': sourceType,
+      'shape': shape,
+    });
+  }
+
+  @override
   Future<void> closeSession(String sessionId) => Future.value();
 
   @override
@@ -124,6 +133,14 @@ class MockFlutterOnnxruntimePlatform with MockPlatformInterfaceMixin implements 
 
   @override
   Future<void> releaseOrtValue(String valueId) => Future.value();
+
+  @override
+  Future<Map<String, dynamic>> writeOrtValueDataToBinaryFile(String valueId, String filePath) {
+    return Future.value({
+      'dataType': 'float32',
+      'shape': [2, 2]
+    });
+  }
 
   @override
   Future<List<String>> getAvailableProviders() => Future.value(['CPU']);

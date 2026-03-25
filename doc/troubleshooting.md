@@ -40,24 +40,9 @@ Common issues and their solutions.
     pod update onnxruntime-objc
     ```
 
-## macOS
-* Target minimum version: MacOS 14
-    * Open `macos/Podfile` and change the target minimum version to 14.0
-        ```pod
-        platform :osx, '14.0'
-        ```
-    * "error: compiling for macOS 10.14, but module 'flutter_onnxruntime' has a minimum deployment target of macOS 14.0".
-        * In terminal, cd to the `macos` directory and run the XCode to open the project:
-            ```
-            open Runner.xcworkspace
-            ```
-        * In `Runner` -> `General`, change `Minimum Deployments` to `14.0`.
-* "The 'Pods-Runner' target has transitive dependencies that include statically linked binaries: (onnxruntime-objc and onnxruntime-c)". In `Podfile` change:
+## OHOS
+* If HAP packaging fails during signing, verify your HarmonyOS signing profile is configured for the current bundle and rebuild with:
+    ```bash
+    flutter build hap -v
     ```
-    target 'Runner' do
-    use_frameworks! :linkage => :static
-    ```
-
-
-## Linux
-* When running with ONNX Runtime 1.21.0, you may see reference counting warnings related to FlValue objects. These don't prevent the app from running but may be addressed in future updates.
+* If the app reports `MissingPluginException`, uninstall the old package from the device and reinstall the latest signed HAP to avoid stale plugin registration artifacts.

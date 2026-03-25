@@ -110,6 +110,16 @@ class MethodChannelFlutterOnnxruntime extends FlutterOnnxruntimePlatform {
   }
 
   @override
+  Future<Map<String, dynamic>> createOrtValueFromBinaryFile(String sourceType, String filePath, List<int> shape) async {
+    final result = await methodChannel.invokeMethod<Map<Object?, Object?>>('createOrtValueFromBinaryFile', {
+      'sourceType': sourceType,
+      'filePath': filePath,
+      'shape': shape,
+    });
+    return _convertMapToStringDynamic(result ?? {});
+  }
+
+  @override
   Future<Map<String, dynamic>> convertOrtValue(String valueId, String targetType) async {
     final result = await methodChannel.invokeMethod<Map<Object?, Object?>>('convertOrtValue', {
       'valueId': valueId,
@@ -121,6 +131,15 @@ class MethodChannelFlutterOnnxruntime extends FlutterOnnxruntimePlatform {
   @override
   Future<Map<String, dynamic>> getOrtValueData(String valueId) async {
     final result = await methodChannel.invokeMethod<Map<Object?, Object?>>('getOrtValueData', {'valueId': valueId});
+    return _convertMapToStringDynamic(result ?? {});
+  }
+
+  @override
+  Future<Map<String, dynamic>> writeOrtValueDataToBinaryFile(String valueId, String filePath) async {
+    final result = await methodChannel.invokeMethod<Map<Object?, Object?>>('writeOrtValueDataToBinaryFile', {
+      'valueId': valueId,
+      'filePath': filePath,
+    });
     return _convertMapToStringDynamic(result ?? {});
   }
 
