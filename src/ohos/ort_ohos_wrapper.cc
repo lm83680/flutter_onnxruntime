@@ -75,6 +75,37 @@ public:
     return tensor_id;
   }
 
+  std::string CreateTensorFromBinaryFile(const std::string &source_type, const std::string &file_path, const std::vector<int64_t> &shape) {
+    std::ifstream input(file_path, std::ios::binary);
+    if (!input.good()) {
+      throw std::runtime_error("二进制张量文件不存在");
+    }
+
+    input.seekg(0, std::ios::end);
+    const std::streamoff file_size = input.tellg();
+    input.seekg(0, std::ios::beg);
+    if (file_size <= 0) {
+      throw std::runtime_error("二进制张量文件为空");
+    }
+
+    std::vector<uint8_t> file_bytes(static_cast<size_t>(file_size));
+    input.read(reinterpret_cast<char *>(file_bytes.data()), file_size);
+
+    if (source_type == "float32") {
+      return CreateTensorFromRawBytes<float>(source_type, file_bytes, shape);
+    }
+
+    if (source_type == "int32") {
+      return CreateTensorFromRawBytes<int32_t>(source_type, file_bytes, shape);
+    }
+
+    if (source_type == "int64") {
+      return CreateTensorFromRawBytes<int64_t>(source_type, file_bytes, shape);
+    }
+
+    throw std::runtime_error("当前 OHOS 仅支持 float32/int32/int64 张量");
+  }
+
   ClonedTensor CloneTensor(const std::string &tensor_id) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -139,6 +170,46 @@ public:
     return stream.str();
   }
 
+  std::string WriteTensorDataToBinaryFile(const std::string &tensor_id, const std::string &file_path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto tensor_it = tensors_.find(tensor_id);
+    auto type_it = tensor_types_.find(tensor_id);
+    auto shape_it = tensor_shapes_.find(tensor_id);
+    if (tensor_it == tensors_.end() || type_it == tensor_types_.end() || shape_it == tensor_shapes_.end()) {
+      throw std::runtime_error("未找到对应的 OrtValue");
+    }
+
+    const size_t element_count = tensor_it->second->GetTensorTypeAndShapeInfo().GetElementCount();
+    size_t element_size = 0;
+    const void *data_ptr = nullptr;
+
+    if (type_it->second == "float32") {
+      data_ptr = tensor_it->second->GetTensorMutableData<float>();
+      element_size = sizeof(float);
+    } else if (type_it->second == "int32") {
+      data_ptr = tensor_it->second->GetTensorMutableData<int32_t>();
+      element_size = sizeof(int32_t);
+    } else if (type_it->second == "int64") {
+      data_ptr = tensor_it->second->GetTensorMutableData<int64_t>();
+      element_size = sizeof(int64_t);
+    } else {
+      throw std::runtime_error("当前 OHOS 仅支持 float32/int32/int64 张量");
+    }
+
+    std::ofstream output(file_path, std::ios::binary | std::ios::trunc);
+    if (!output.good()) {
+      throw std::runtime_error("无法写入张量二进制文件");
+    }
+
+    output.write(reinterpret_cast<const char *>(data_ptr), static_cast<std::streamsize>(element_count * element_size));
+    output.flush();
+
+    std::ostringstream stream;
+    stream << "{\"dataType\":\"" << EscapeJson(type_it->second) << "\",\"shape\":" << ToJsonIntArray(shape_it->second) << "}";
+    return stream.str();
+  }
+
   bool ReleaseTensor(const std::string &tensor_id) {
     std::lock_guard<std::mutex> lock(mutex_);
     const bool removed = tensors_.erase(tensor_id) > 0;
@@ -167,6 +238,18 @@ public:
   }
 
 private:
+  template <typename T>
+  std::string CreateTensorFromRawBytes(const std::string &source_type, const std::vector<uint8_t> &raw_bytes, const std::vector<int64_t> &shape) {
+    if (raw_bytes.size() % sizeof(T) != 0) {
+      throw std::runtime_error("二进制张量文件大小与数据类型不匹配");
+    }
+
+    const size_t element_count = raw_bytes.size() / sizeof(T);
+    std::vector<T> data(element_count);
+    std::memcpy(data.data(), raw_bytes.data(), raw_bytes.size());
+    return CreateNumericTensor<T>(source_type, data, shape);
+  }
+
   template <typename T>
   std::string CreateNumericTensor(const std::string &source_type, const std::vector<T> &data, const std::vector<int64_t> &shape) {
     ValidateTensorShape(shape, data.size());
@@ -440,8 +523,9 @@ std::string GetStringArgument(napi_env env, napi_callback_info info, size_t inde
 
   size_t length = 0;
   napi_get_value_string_utf8(env, args[index], nullptr, 0, &length);
-  std::string result(length, '\0');
-  napi_get_value_string_utf8(env, args[index], result.data(), length + 1, &length);
+  std::string result(length + 1, '\0');
+  napi_get_value_string_utf8(env, args[index], result.data(), result.size(), &length);
+  result.resize(length);
   return result;
 }
 
@@ -493,10 +577,27 @@ napi_value NapiCreateOrtValue(napi_env env, napi_callback_info info) {
   });
 }
 
+napi_value NapiCreateOrtValueFromBinaryFile(napi_env env, napi_callback_info info) {
+  return WrapStringMethod(env, info, [](napi_env inner_env, napi_callback_info inner_info) {
+    const std::string source_type = GetStringArgument(inner_env, inner_info, 0);
+    const std::string file_path = GetStringArgument(inner_env, inner_info, 1);
+    const std::string shape_json = GetStringArgument(inner_env, inner_info, 2);
+    return std::string(ortCreateOrtValueFromBinaryFile(source_type.c_str(), file_path.c_str(), shape_json.c_str()));
+  });
+}
+
 napi_value NapiGetOrtValueData(napi_env env, napi_callback_info info) {
   return WrapStringMethod(env, info, [](napi_env inner_env, napi_callback_info inner_info) {
     const std::string value_id = GetStringArgument(inner_env, inner_info, 0);
     return std::string(ortGetOrtValueData(value_id.c_str()));
+  });
+}
+
+napi_value NapiWriteOrtValueDataToBinaryFile(napi_env env, napi_callback_info info) {
+  return WrapStringMethod(env, info, [](napi_env inner_env, napi_callback_info inner_info) {
+    const std::string value_id = GetStringArgument(inner_env, inner_info, 0);
+    const std::string file_path = GetStringArgument(inner_env, inner_info, 1);
+    return std::string(ortWriteOrtValueDataToBinaryFile(value_id.c_str(), file_path.c_str()));
   });
 }
 
@@ -530,7 +631,9 @@ napi_value Init(napi_env env, napi_value exports) {
        nullptr},
       {"ortCreateSession", nullptr, NapiCreateSession, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"ortCreateOrtValue", nullptr, NapiCreateOrtValue, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"ortCreateOrtValueFromBinaryFile", nullptr, NapiCreateOrtValueFromBinaryFile, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"ortGetOrtValueData", nullptr, NapiGetOrtValueData, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"ortWriteOrtValueDataToBinaryFile", nullptr, NapiWriteOrtValueDataToBinaryFile, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"ortRunInference", nullptr, NapiRunInference, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"ortCloseSession", nullptr, NapiCloseSession, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"ortReleaseOrtValue", nullptr, NapiReleaseOrtValue, nullptr, nullptr, nullptr, napi_default, nullptr},
@@ -615,6 +718,26 @@ const char *ortCreateOrtValue(const char *source_type, const char *data_json, co
   return g_response_buffer.c_str();
 }
 
+const char *ortCreateOrtValueFromBinaryFile(const char *source_type, const char *file_path, const char *shape_json) {
+  try {
+    if (source_type == nullptr || file_path == nullptr || shape_json == nullptr) {
+      g_response_buffer = ErrorJson("INVALID_ARGUMENT", "创建二进制 OrtValue 的参数不完整");
+      return g_response_buffer.c_str();
+    }
+
+    const std::vector<int64_t> shape = ParseShape(shape_json);
+    const std::string value_id = g_tensor_store.CreateTensorFromBinaryFile(source_type, file_path, shape);
+    g_response_buffer = "{\"valueId\":\"" + EscapeJson(value_id) + "\",\"dataType\":\"" + EscapeJson(source_type) +
+                        "\",\"shape\":" + ToJsonIntArray(shape) + "}";
+  } catch (const Ort::Exception &exception) {
+    g_response_buffer = ErrorJson("ORT_VALUE_CREATION_FAILED", exception.what());
+  } catch (const std::exception &exception) {
+    g_response_buffer = ErrorJson("ORT_VALUE_CREATION_FAILED", exception.what());
+  }
+
+  return g_response_buffer.c_str();
+}
+
 const char *ortGetOrtValueData(const char *value_id) {
   try {
     if (value_id == nullptr || std::string(value_id).empty()) {
@@ -627,6 +750,23 @@ const char *ortGetOrtValueData(const char *value_id) {
   } catch (const std::exception &exception) {
     g_response_buffer = ErrorJson("ORT_VALUE_READ_FAILED", exception.what());
   }
+  return g_response_buffer.c_str();
+}
+
+const char *ortWriteOrtValueDataToBinaryFile(const char *value_id, const char *file_path) {
+  try {
+    if (value_id == nullptr || std::string(value_id).empty() || file_path == nullptr || std::string(file_path).empty()) {
+      g_response_buffer = ErrorJson("INVALID_ARGUMENT", "valueId 和 filePath 不能为空");
+      return g_response_buffer.c_str();
+    }
+
+    g_response_buffer = g_tensor_store.WriteTensorDataToBinaryFile(value_id, file_path);
+  } catch (const Ort::Exception &exception) {
+    g_response_buffer = ErrorJson("ORT_VALUE_WRITE_FAILED", exception.what());
+  } catch (const std::exception &exception) {
+    g_response_buffer = ErrorJson("ORT_VALUE_WRITE_FAILED", exception.what());
+  }
+
   return g_response_buffer.c_str();
 }
 

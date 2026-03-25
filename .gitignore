@@ -53,3 +53,4 @@ example/ohos/entry/build/
 example/ohos/entry/oh-package-lock.json5
 example/ohos/entry/src/main/resources/rawfile/flutter_assets/
 third_party/*.zip
+example/assets/models/is_cat.onnx

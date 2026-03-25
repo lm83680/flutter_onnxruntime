@@ -22,6 +22,13 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  image: ^4.5.4
+  path_provider: any
+  image_picker:
+    git:
+      url: "https://gitcode.com/openharmony-tpc/flutter_packages.git"
+      ref: "br_image_picker-v1.1.2_ohos"
+      path: "packages/image_picker/image_picker"
 
 dev_dependencies:
   integration_test:
@@ -47,3 +54,4 @@ flutter:
     - assets/models/transpose_and_avg_model_int64.onnx
     - assets/models/transpose_and_avg_model_fp16.onnx
     - assets/models/string_concat_model.onnx
+    - assets/models/is_cat.onnx

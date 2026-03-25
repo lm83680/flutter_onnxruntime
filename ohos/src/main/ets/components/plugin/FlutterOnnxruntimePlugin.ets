@@ -9,12 +9,14 @@ import {
 import {
   ortCloseSession,
   ortCreateOrtValue,
+  ortCreateOrtValueFromBinaryFile,
   ortCreateSession,
   ortGetAvailableProvidersJson,
   ortGetOrtValueData,
   ortGetPlatformVersion,
   ortReleaseOrtValue,
   ortRunInference,
+  ortWriteOrtValueDataToBinaryFile,
 } from 'libflutter_onnxruntime_ohos.so';
 
 class NativeErrorDetail {
@@ -185,6 +187,26 @@ export default class FlutterOnnxruntimePlugin implements FlutterPlugin, MethodCa
       return;
     }
 
+    if (call.method === "createOrtValueFromBinaryFile") {
+      const sourceType: string = `${call.argument('sourceType') ?? ''}`;
+      const filePath: string = `${call.argument('filePath') ?? ''}`;
+      const shapeValue: Object | null = call.hasArgument('shape') ? call.argument('shape') as Object : null;
+      const payload = this.parseJson(
+        ortCreateOrtValueFromBinaryFile(
+          sourceType,
+          filePath,
+          this.toJsonText(shapeValue, '[]'),
+        ),
+      );
+      const error = this.getError(payload);
+      if (error !== null) {
+        result.error(error.get('code')!, error.get('message')!, null);
+        return;
+      }
+      result.success(payload as OrtValueResultPayload);
+      return;
+    }
+
     if (call.method === "getOrtValueData") {
       const valueId: string = `${call.argument('valueId') ?? ''}`;
       const payload = this.parseJson(ortGetOrtValueData(valueId));
@@ -194,6 +216,19 @@ export default class FlutterOnnxruntimePlugin implements FlutterPlugin, MethodCa
         return;
       }
       result.success(payload as OrtValueDataPayload);
+      return;
+    }
+
+    if (call.method === "writeOrtValueDataToBinaryFile") {
+      const valueId: string = `${call.argument('valueId') ?? ''}`;
+      const filePath: string = `${call.argument('filePath') ?? ''}`;
+      const payload = this.parseJson(ortWriteOrtValueDataToBinaryFile(valueId, filePath));
+      const error = this.getError(payload);
+      if (error !== null) {
+        result.error(error.get('code')!, error.get('message')!, null);
+        return;
+      }
+      result.success(payload);
       return;
     }
 
