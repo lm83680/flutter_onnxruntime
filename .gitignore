@@ -32,6 +32,24 @@ migrate_working_dir/
 .flutter-plugins
 .flutter-plugins-dependencies
 build/
+.codex/
+operations-log.md
+verification.md
 
 # Downloaded onnxruntime library
 onnxruntime_download/
+
+# OHOS generated files
+ohos/.cxx/
+ohos/local.properties
+ohos/oh-package-lock.json5
+example/ohos/.hvigor/
+example/ohos/local.properties
+example/ohos/node_modules/
+example/ohos/oh_modules/
+example/ohos/oh-package-lock.json5
+example/ohos/package-lock.json
+example/ohos/entry/build/
+example/ohos/entry/oh-package-lock.json5
+example/ohos/entry/src/main/resources/rawfile/flutter_assets/
+third_party/*.zip

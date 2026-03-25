@@ -5,7 +5,7 @@ homepage: https://github.com/masicai/flutter_onnxruntime
 repository: https://github.com/masicai/flutter_onnxruntime
 
 environment:
-  sdk: ^3.7.0
+  sdk: ^3.6.0
   flutter: '>=3.3.0'
 
 dependencies:
@@ -20,7 +20,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^5.0.0
 
 flutter:
   plugin:
@@ -38,6 +38,8 @@ flutter:
         pluginClass: FlutterOnnxruntimeWebPlugin
         fileName: web/flutter_onnxruntime_web_plugin.dart
       windows:
+        pluginClass: FlutterOnnxruntimePlugin
+      ohos:
         pluginClass: FlutterOnnxruntimePlugin
 
 topics:

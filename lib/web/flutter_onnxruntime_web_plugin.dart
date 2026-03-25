@@ -122,27 +122,26 @@ class FlutterOnnxruntimeWebPlugin extends FlutterOnnxruntimePlatform {
       // Set execution providers if specified
       if (options.containsKey('providers')) {
         final providers = options['providers'] as List<String>;
-        final jsProviders =
-            providers.map((provider) {
-              // Map Flutter provider names to onnxruntime-web provider names
-              switch (provider) {
-                case 'CPU':
-                case 'WEB_ASSEMBLY':
-                  return 'wasm';
-                case 'WEB_GL':
-                  return 'webgl';
-                case 'WEB_GPU':
-                  return 'webgpu';
-                case 'WEB_NN':
-                  return 'webnn';
-                default:
-                  throw PlatformException(
-                    code: 'INVALID_PROVIDER',
-                    message: 'Provider $provider is not supported',
-                    details: null,
-                  );
-              }
-            }).toList();
+        final jsProviders = providers.map((provider) {
+          // Map Flutter provider names to onnxruntime-web provider names
+          switch (provider) {
+            case 'CPU':
+            case 'WEB_ASSEMBLY':
+              return 'wasm';
+            case 'WEB_GL':
+              return 'webgl';
+            case 'WEB_GPU':
+              return 'webgpu';
+            case 'WEB_NN':
+              return 'webnn';
+            default:
+              throw PlatformException(
+                code: 'INVALID_PROVIDER',
+                message: 'Provider $provider is not supported',
+                details: null,
+              );
+          }
+        }).toList();
 
         // Set executionProviders property
         jsOptions.setProperty('executionProviders'.toJS, jsArrayFrom(jsProviders));
@@ -341,10 +340,7 @@ class FlutterOnnxruntimeWebPlugin extends FlutterOnnxruntimePlatform {
       }
 
       // Run inference
-      final runPromise =
-          jsRunOptions != null
-              ? callMethod(session, 'run', [jsInputs, jsRunOptions])
-              : callMethod(session, 'run', [jsInputs]);
+      final runPromise = jsRunOptions != null ? callMethod(session, 'run', [jsInputs, jsRunOptions]) : callMethod(session, 'run', [jsInputs]);
 
       // Wait for the promise to resolve
       final jsOutputs = await promiseToFuture<JSObject>(runPromise);
@@ -728,16 +724,15 @@ class FlutterOnnxruntimeWebPlugin extends FlutterOnnxruntimePlatform {
         case 'bool':
           // For boolean tensors, ONNX Runtime uses a Uint8Array with 0/1 values
           // Make sure we properly handle all possible incoming bool representations
-          final boolArray =
-              (data as List).map((value) {
-                if (value is bool) {
-                  return value ? 1 : 0;
-                } else if (value is num) {
-                  return value != 0 ? 1 : 0;
-                } else {
-                  return value == true ? 1 : 0;
-                }
-              }).toList();
+          final boolArray = (data as List).map((value) {
+            if (value is bool) {
+              return value ? 1 : 0;
+            } else if (value is num) {
+              return value != 0 ? 1 : 0;
+            } else {
+              return value == true ? 1 : 0;
+            }
+          }).toList();
           final jsData = _convertToTypedArray(boolArray, 'Uint8Array');
           tensor = tensorConstructor.callAsConstructorVarArgs([dataType.toJS, jsData, jsShape]);
           break;
@@ -788,8 +783,7 @@ class FlutterOnnxruntimeWebPlugin extends FlutterOnnxruntimePlatform {
       'Int32Array' => int32ArrayConstructor,
       'BigInt64Array' => bigInt64ArrayConstructor,
       'Uint8Array' => uint8ArrayConstructor,
-      _ =>
-        throw PlatformException(
+      _ => throw PlatformException(
           code: "UNSUPPORTED_ARRAY_TYPE",
           message: "Unsupported array type: $arrayType",
           details: null,

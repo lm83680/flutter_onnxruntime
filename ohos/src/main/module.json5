@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "flutter_onnxruntime",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

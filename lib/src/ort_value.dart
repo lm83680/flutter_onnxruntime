@@ -83,8 +83,7 @@ class OrtValue {
   /// [shape] is the shape of the tensor
   static Future<OrtValue> fromList(dynamic data, List<int> shape) async {
     // If data is a regular List, convert it to the appropriate TypedData
-    if (data is List &&
-        !(data is Float32List || data is Int32List || data is Int64List || data is Uint8List || data is List<String>)) {
+    if (data is List && !(data is Float32List || data is Int32List || data is Int64List || data is Uint8List || data is List<String>)) {
       data = _convertListToTypedData(data);
     }
 
@@ -201,9 +200,7 @@ class OrtValue {
       // Check if Int64List is needed (any value outside Int32 range)
       bool needsInt64 = data.any((e) => (e as num).toInt() > 2147483647 || (e).toInt() < -2147483648);
 
-      return needsInt64
-          ? Int64List.fromList(data.map((e) => (e as num).toInt()).toList())
-          : Int32List.fromList(data.map((e) => (e as num).toInt()).toList());
+      return needsInt64 ? Int64List.fromList(data.map((e) => (e as num).toInt()).toList()) : Int32List.fromList(data.map((e) => (e as num).toInt()).toList());
     }
 
     throw ArgumentError('Unsupported element type: ${firstElement.runtimeType} in list');

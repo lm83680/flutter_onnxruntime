@@ -1,0 +1,9 @@
+{
+  "name": "flutter_onnxruntime",
+  "version": "1.0.0",
+  "description": "OHOS host implementation for flutter_onnxruntime.",
+  "main": "index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

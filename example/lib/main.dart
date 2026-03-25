@@ -34,9 +34,17 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _initializeSession() async {
-    _session = await _flutterOnnxruntimePlugin.createSessionFromAsset('assets/models/addition_model.ort');
-    // print(_session?.inputNames);
-    // print(_session?.outputNames);
+    try {
+      _session = await _flutterOnnxruntimePlugin.createSessionFromAsset('assets/models/addition_model.ort');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _result = 'Init Error: $error';
+      });
+      rethrow;
+    }
   }
 
   @override
@@ -49,31 +57,45 @@ class _MyAppState extends State<MyApp> {
 
   // Run a simple Addition Model
   Future<void> _runAddition(double a, double b) async {
-    if (_session == null) {
-      await _initializeSession();
+    final createdInputs = <OrtValue>[];
+    final createdOutputs = <OrtValue>[];
+
+    try {
+      if (_session == null) {
+        await _initializeSession();
+      }
+
+      final inputs = {
+        'A': await OrtValue.fromList([a], [1]),
+        'B': await OrtValue.fromList([b], [1]),
+      };
+      createdInputs.addAll(inputs.values);
+
+      final outputs = await _session!.run(inputs);
+      createdOutputs.addAll(outputs.values);
+
+      final outputData = await outputs['C']!.asList();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _result = outputData[0].toString();
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _result = 'Error: $error';
+      });
+    } finally {
+      for (final tensor in createdInputs) {
+        await tensor.dispose();
+      }
+      for (final tensor in createdOutputs) {
+        await tensor.dispose();
+      }
     }
-
-    // Prepare the inputs
-    final inputs = {
-      'A': await OrtValue.fromList([a], [1]),
-      'B': await OrtValue.fromList([b], [1]),
-    };
-
-    // Execute the inference
-    final outputs = await _session!.run(inputs);
-
-    // Extract the output data
-    final outputData = await outputs['C']!.asList();
-
-    // Clean up
-    for (final tensor in inputs.values) {
-      tensor.dispose();
-    }
-    outputs['C']!.dispose();
-
-    setState(() {
-      _result = outputData[0].toString();
-    });
   }
 
   @override
@@ -98,10 +120,10 @@ class _MyAppState extends State<MyApp> {
                   decoration: InputDecoration(labelText: 'Enter number B'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     final a = double.tryParse(_aController.text) ?? 0.0;
                     final b = double.tryParse(_bController.text) ?? 0.0;
-                    _runAddition(a, b); // Run the addition when the button is pressed
+                    await _runAddition(a, b); // Run the addition when the button is pressed
                   },
                   child: Text('Add'),
                 ),
