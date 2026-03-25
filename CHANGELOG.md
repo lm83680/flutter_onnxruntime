@@ -1,3 +1,9 @@
+## 2.0.0
+* Breaking change: limit supported platforms to Android, iOS, and OHOS.
+* Update `createSessionFromAsset` with model hash/version metadata to avoid stale cached model files while preventing unnecessary full rewrites.
+* Optimize tensor transport strategy: Android/iOS prefer in-memory channel transport, OHOS keeps binary transport for large tensor throughput.
+* Improve binary tensor temp file safety on OHOS path with UUID-based file names and automatic cleanup.
+
 ## 1.6.3
 * Add float16 tensor support for iOS and macOS
 * Upgrade `onnxruntime-objc` for macOS to 1.22.0

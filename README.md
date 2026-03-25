@@ -10,6 +10,8 @@ Native Wrapper Flutter Plugin for ONNX Runtime
 
 *Current supported ONNX Runtime version:* **1.22.0**
 
+*Breaking change:* Starting from `2.0.0`, this plugin supports only **Android**, **iOS**, and **OHOS**.
+
 *Note:* For Android build, you need to upgrade your `flutter_onnxruntime` to version `>=1.5.1` to satisfy the [16 KB Google Play compatibility requirement](https://android-developers.googleblog.com/2025/05/prepare-play-apps-for-devices-with-16kb-page-size.html).
 
 ## 🌟 Why This Project?
@@ -33,7 +35,7 @@ Add the following dependency to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_onnxruntime: ^1.6.0
+  flutter_onnxruntime: ^2.0.0
 ```
 
 ### Quick Start
@@ -90,6 +92,15 @@ Clone [this repository](https://github.com/masicai/flutter-onnxruntime-examples)
 | OrtSessionOptions | Configuration options for session creation |
 | OrtRunOptions | Configuration options for inference execution |
 
+## ⚙️ Tensor Transport Strategy
+
+`OrtValue` creation and readback are automatically optimized by platform:
+
+* Android / iOS: prefer in-memory transport (typed data via method channel)
+* OHOS: use binary transport for large tensor throughput
+
+You can still explicitly use `OrtValue.fromBinaryFile(...)` when needed, but common usage should stay on `OrtValue.fromList(...)`.
+
 ## 🚧 Implementation Status
 
 | Feature | Android | iOS | OHOS |
@@ -111,7 +122,7 @@ Clone [this repository](https://github.com/masicai/flutter-onnxruntime-examples)
 
 ✍️: Planned
 
-`*`: Retrieving model metadata and input/output info is not available for Swift and Javascript API.
+`*`: Retrieving model metadata and input/output info is not available for the current Swift API.
 
 <sup>1</sup>: Execution Providers (EP) are hardware accelerated inference interface for AI inference (e.g., CPU, GPU, NPU, TPU, etc.) 
 

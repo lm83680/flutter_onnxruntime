@@ -6,9 +6,11 @@
 
 // ignore_for_file: constant_identifier_names
 
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter_onnxruntime/src/flutter_onnxruntime_platform_interface.dart';
@@ -16,6 +18,8 @@ import 'package:flutter_onnxruntime/src/ort_provider.dart';
 import 'package:flutter_onnxruntime/src/ort_session.dart';
 
 class OnnxRuntime {
+  static final Map<String, String> _assetHashCache = <String, String>{};
+
   Future<String?> getPlatformVersion() {
     return FlutterOnnxruntimePlatform.instance.getPlatformVersion();
   }
@@ -40,12 +44,20 @@ class OnnxRuntime {
     final directory = await getTemporaryDirectory();
     final fileName = assetKey.split('/').last;
     final filePath = '${directory.path}${Platform.pathSeparator}$fileName';
+    final metadataPath = '$filePath.meta.json';
 
-    final file = File(filePath);
-    if (!await file.exists()) {
-      await Directory(directory.path).create(recursive: true);
-      final data = await rootBundle.load(assetKey);
-      await file.writeAsBytes(data.buffer.asUint8List());
+    await Directory(directory.path).create(recursive: true);
+    final ByteData data = await rootBundle.load(assetKey);
+    final Uint8List modelBytes = data.buffer.asUint8List();
+    final String latestHash = _resolveAssetHash(assetKey, modelBytes);
+
+    final File file = File(filePath);
+    final _ModelVersionMeta? existingMeta = await _readModelVersionMeta(metadataPath);
+    final bool modelUpToDate = await file.exists() && existingMeta?.hash == latestHash;
+
+    if (!modelUpToDate) {
+      await file.writeAsBytes(modelBytes, flush: true);
+      await _writeModelVersionMeta(metadataPath, _ModelVersionMeta(hash: latestHash));
     }
 
     return createSession(filePath, options: options);
@@ -64,4 +76,52 @@ class OnnxRuntime {
       return provider;
     }).toList();
   }
+
+  static String _resolveAssetHash(String assetKey, Uint8List bytes) {
+    final String? cachedHash = _assetHashCache[assetKey];
+    if (cachedHash != null) {
+      return cachedHash;
+    }
+
+    final String hash = sha256.convert(bytes).toString();
+    _assetHashCache[assetKey] = hash;
+    return hash;
+  }
+
+  static Future<_ModelVersionMeta?> _readModelVersionMeta(String metadataPath) async {
+    final File metadataFile = File(metadataPath);
+    if (!await metadataFile.exists()) {
+      return null;
+    }
+
+    try {
+      final String rawText = await metadataFile.readAsString();
+      final Object? decoded = jsonDecode(rawText);
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final String? hash = decoded['hash'] as String?;
+      if (hash == null || hash.isEmpty) {
+        return null;
+      }
+      return _ModelVersionMeta(hash: hash);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _writeModelVersionMeta(String metadataPath, _ModelVersionMeta metadata) async {
+    final File metadataFile = File(metadataPath);
+    final String jsonText = jsonEncode(<String, dynamic>{
+      'hash': metadata.hash,
+    });
+    await metadataFile.writeAsString(jsonText, flush: true);
+  }
+}
+
+class _ModelVersionMeta {
+  final String hash;
+
+  const _ModelVersionMeta({required this.hash});
 }

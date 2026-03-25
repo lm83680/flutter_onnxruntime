@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flutter_onnxruntime/src/flutter_onnxruntime_platform_interface.dart';
 
 /// Represents a data type in ONNX Runtime
@@ -43,6 +44,8 @@ enum OrtDataType {
 /// It wraps the native OrtValue (C/C++) or OnnxTensor (Java) types from
 /// the ONNX Runtime API.
 class OrtValue {
+  static const Uuid _uuid = Uuid();
+
   /// Unique identifier for this tensor in the native code
   final String id;
 
@@ -118,13 +121,19 @@ class OrtValue {
     }
 
     if (data is TypedData && await _shouldUseBinaryTransport(sourceType)) {
-      final String filePath = await _createTempTensorFilePath('ort_input_$sourceType.bin');
-      await File(filePath).writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
-      return OrtValue.fromBinaryFile(
-        dataType: OrtDataType.values.firstWhere((dt) => dt.name == sourceType),
-        filePath: filePath,
-        shape: shape,
-      );
+      final String filePath = await _createTempTensorFilePath('ort_input_${sourceType}_${_uuid.v4()}.bin');
+      try {
+        await File(filePath).writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
+        return OrtValue.fromBinaryFile(
+          dataType: OrtDataType.values.firstWhere((dt) => dt.name == sourceType),
+          filePath: filePath,
+          shape: shape,
+        );
+      } finally {
+        try {
+          await File(filePath).delete();
+        } catch (_) {}
+      }
     }
 
     final result = await FlutterOnnxruntimePlatform.instance.createOrtValue(sourceType, data, shape);
@@ -192,13 +201,19 @@ class OrtValue {
     }
 
     if (await _shouldUseBinaryTransport('float32')) {
-      final String filePath = await _createTempTensorFilePath('ort_output_$id.bin');
-      final Map<String, dynamic> metadata = await writeDataToBinaryFile(filePath);
-      if (metadata['dataType'] != 'float32') {
-        throw ArgumentError('Expected float32 tensor, but got ${metadata['dataType']}');
+      final String filePath = await _createTempTensorFilePath('ort_output_${id}_${_uuid.v4()}.bin');
+      try {
+        final Map<String, dynamic> metadata = await writeDataToBinaryFile(filePath);
+        if (metadata['dataType'] != 'float32') {
+          throw ArgumentError('Expected float32 tensor, but got ${metadata['dataType']}');
+        }
+        final Uint8List rawBytes = await File(filePath).readAsBytes();
+        return rawBytes.buffer.asFloat32List(rawBytes.offsetInBytes, rawBytes.lengthInBytes ~/ Float32List.bytesPerElement);
+      } finally {
+        try {
+          await File(filePath).delete();
+        } catch (_) {}
       }
-      final Uint8List rawBytes = await File(filePath).readAsBytes();
-      return rawBytes.buffer.asFloat32List(rawBytes.offsetInBytes, rawBytes.lengthInBytes ~/ Float32List.bytesPerElement);
     }
 
     final List<dynamic> rawValues = await asFlattenedList();
@@ -363,7 +378,7 @@ class OrtValue {
     if (platformVersion == null) {
       return false;
     }
-    return platformVersion == 'OpenHarmony' || platformVersion.startsWith('Android ') || platformVersion.startsWith('iOS ');
+    return platformVersion == 'OpenHarmony';
   }
 
   static Future<String> _createTempTensorFilePath(String fileName) async {
